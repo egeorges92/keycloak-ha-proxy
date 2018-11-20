@@ -1,0 +1,83 @@
+version: '3'
+
+volumes:
+  postgres_data:
+      driver: local
+
+services:
+
+  postgres:
+    image: postgres:10.5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+      POSTGRES_ROOT_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  keycloak-master:
+    image: jboss/keycloak:4.5.0.Final
+    environment:
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: password
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: Pa55w0rd
+      PROXY_ADDRESS_FORWARDING: 'true'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - ./keycloak/themes/raincatcher:/opt/jboss/keycloak/themes/raincatcher
+
+  keycloak-slave:
+    image: jboss/keycloak:4.5.0.Final
+    environment:
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: password
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: Pa55w0rd
+      PROXY_ADDRESS_FORWARDING: 'true'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    depends_on:
+      - postgres
+      - keycloak-master
+    restart: unless-stopped
+
+  nginx:
+    image: example.org/nginx:1.15.5
+    build :
+      context : ./nginx
+    ports:
+      - 80:80
+      - 443:443
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+    restart: unless-stopped
